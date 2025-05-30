@@ -2,6 +2,6 @@
 #define HID_KBD_BRIGHTNESS_
 
 // Enable debugging logs
-#define DEBUG
+//#define DEBUG
 
 #endif
