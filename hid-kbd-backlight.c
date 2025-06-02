@@ -22,6 +22,7 @@
  */
 
 // Apple Inc. Touch Bar Display.
+#define VENDOR_ID_TB 0x5ac // TODO
 #define PRODUCT_ID_TB 0x8302
 
 /**
@@ -83,6 +84,7 @@ static ssize_t brightness_delay_store(struct kobject* obj, struct kobj_attribute
 static ssize_t brightness_delay_show(struct kobject* obj, struct kobj_attribute* attr, char* buf);
 static ssize_t brightness_steps_store(struct kobject* obj, struct kobj_attribute* attr, const char* buf, size_t count);
 static ssize_t brightness_steps_show(struct kobject* obj, struct kobj_attribute* attr, char* buf);
+static int brightness_set_blocking_hook(struct led_classdev* led_cdev, enum led_brightness brghtns);
 static void brightness_init(void);
 static void brightness_update(void);
 static void brightness_counter(const enum counter_type_e type);
@@ -143,6 +145,7 @@ static struct input_handler kbd_handler = {
  * Represents keyboard backlight brightness control.
  * 
  * @led: Keyboard LED-device.
+ * @brightness_set_blocking: Function pointer from the led_classdev struct
  * @brightnes: Brightness value of the keyboard backlight.
  * @min: Minimum brightness.
  * @max: Maximum brightness.
@@ -153,6 +156,7 @@ static struct input_handler kbd_handler = {
  */
 static struct {
     struct led_classdev* led;
+    int (*brightness_set_blocking)(struct led_classdev* led_cdev, enum led_brightness brightness);
     unsigned short brightness;
     unsigned short min, max;
     unsigned short default_brightness;
@@ -169,23 +173,29 @@ static struct {
     .check_flags = 0
 };
 
-/// @brief File System Attributes.
-///
-/// Modes are: (OCTAL CONSTANT) -> [Owner, Group, Others].
-///
-/// Available modes: Write: [2] - Read: [4].
-///
+/**
+ * File System Attributes.
+ * 
+ * Modes are: (OCTAL CONSTANT) -> [Owner, Group, Others].
+ * 
+ * Available modes: Write: [2] - Read: [4].
+ */
 /// Current mode set: [0] | [Read + Write] | [Read + Write] | [Read].
 static struct kobj_attribute brightness_attr =
     __ATTR(brightness_value, 0664, brightness_show, brightness_store);
+/// Current mode set: [0] | [Read + Write] | [Read + Write] | [Read].
 static struct kobj_attribute min_brightness_attr =
     __ATTR(min_brightness_value, 0664, min_brightness_show, min_brightness_store);
+/// Current mode set: [0] | [Read + Write] | [Read + Write] | [Read].
 static struct kobj_attribute max_brightness_attr =
     __ATTR(max_brightness_value, 0664, max_brightness_show, max_brightness_store);
+/// Current mode set: [0] | [Read + Write] | [Read + Write] | [Read].
 static struct kobj_attribute brightness_default_attr =
     __ATTR(brightness_default_value, 0664, brightness_default_show, brightness_default_store);
+/// Current mode set: [0] | [Read + Write] | [Read + Write] | [Read].
 static struct kobj_attribute brightness_delay_attr =
     __ATTR(brightness_delay, 0664, brightness_delay_show, brightness_delay_store);
+/// Current mode set: [0] | [Read + Write] | [Read + Write] | [Read].
 static struct kobj_attribute brightness_steps_attr =
     __ATTR(brightness_steps, 0664, brightness_steps_show, brightness_steps_store);
 
@@ -321,6 +331,11 @@ static void __exit kbd_exit(void) {
     sysfs_remove_file(kbd_obj, &brightness_delay_attr.attr);
     sysfs_remove_file(kbd_obj, &brightness_steps_attr.attr);
     kobject_put(kbd_obj);
+
+    // (Unhooking): Reset brightness function pointer
+    if(brightness.brightness_set_blocking) {
+        brightness.led->brightness_set_blocking = brightness.brightness_set_blocking;
+    }
 }
 
 /**
@@ -450,6 +465,23 @@ static ssize_t brightness_steps_show(struct kobject* obj, struct kobj_attribute*
 }
 
 /**
+ * === Hooks ===
+ */
+
+/// @brief This function will be called as a hook for brightness_set_blocking.
+/// If any other function call tries to use a different brightness value than in this module,
+/// it will ignore its actions.
+static int brightness_set_blocking_hook(struct led_classdev* led_cdev, enum led_brightness brghtns) {
+    pr_debug("%sTrying to set brightness value from hook: %d", LOG_TAG, brghtns);
+
+    if(brghtns == brightness.brightness) {
+        brightness.brightness_set_blocking(led_cdev, brghtns);
+    }
+
+    return 0;
+}
+
+/**
  * === Functions ===
  */
 
@@ -464,6 +496,9 @@ static void brightness_init(void) {
 
         if(brightness.led->brightness_set_blocking) {
             brightness.check_flags |= CHECK_BRIGHTNESS_LED_FUNC;
+
+            brightness.brightness_set_blocking = brightness.led->brightness_set_blocking;
+            brightness.led->brightness_set_blocking = brightness_set_blocking_hook;
         }
     }
 }
