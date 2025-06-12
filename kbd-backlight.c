@@ -5,7 +5,7 @@
  * Copyright (c) 2025 Marcel Berlinger
  */
 
-#include "include/hid-kbd-backlight.h"
+#include "include/kbd-backlight.h"
 
 #include <linux/module.h>
 #include <linux/init.h>

@@ -1,6 +1,6 @@
-PROJECT_NAME := HID-KBD-BACKLIGHT
+PROJECT_NAME := KBD-BACKLIGHT
 
-obj-m += hid-kbd-backlight.o
+obj-m += kbd-backlight.o
 
 all:
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
